@@ -226,12 +226,23 @@ export default function CreatePage() {
 
                     {/* Target Chapters */}
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <Label>预计章节数量</Label>
-                        <span className="text-sm font-medium text-primary">{formData.targetChapters} 章</span>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            type="number"
+                            min={3}
+                            max={999}
+                            value={formData.targetChapters}
+                            onChange={(e) => setFormData({ ...formData, targetChapters: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            onBlur={() => setFormData((prev) => ({ ...prev, targetChapters: Math.min(999, Math.max(3, prev.targetChapters || 3)) }))}
+                            className="w-20 h-8 text-right bg-background/50"
+                          />
+                          <span className="text-sm text-muted-foreground">章</span>
+                        </div>
                       </div>
                       <Slider
-                        value={[formData.targetChapters]}
+                        value={[Math.min(999, Math.max(3, formData.targetChapters || 3))]}
                         onValueChange={([value]) => setFormData({ ...formData, targetChapters: value })}
                         min={3}
                         max={999}
@@ -247,12 +258,24 @@ export default function CreatePage() {
 
                     {/* Words Per Chapter */}
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <Label>每章字数</Label>
-                        <span className="text-sm font-medium text-primary">{formData.wordsPerChapter} 字</span>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            type="number"
+                            min={500}
+                            max={10000}
+                            step={100}
+                            value={formData.wordsPerChapter}
+                            onChange={(e) => setFormData({ ...formData, wordsPerChapter: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            onBlur={() => setFormData((prev) => ({ ...prev, wordsPerChapter: Math.min(10000, Math.max(500, prev.wordsPerChapter || 500)) }))}
+                            className="w-24 h-8 text-right bg-background/50"
+                          />
+                          <span className="text-sm text-muted-foreground">字</span>
+                        </div>
                       </div>
                       <Slider
-                        value={[formData.wordsPerChapter]}
+                        value={[Math.min(10000, Math.max(500, formData.wordsPerChapter || 500))]}
                         onValueChange={([value]) => setFormData({ ...formData, wordsPerChapter: value })}
                         min={500}
                         max={10000}
