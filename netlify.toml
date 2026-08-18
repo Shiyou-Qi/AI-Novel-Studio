@@ -1,0 +1,12 @@
+[build]
+  command = "pnpm build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_VERSION = "9"
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  TAILWIND_DISABLE_OXIDE = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
