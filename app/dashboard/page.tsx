@@ -36,7 +36,7 @@ export default async function DashboardPage() {
   // Fetch total chapters and words
   const { data: chaptersData } = await supabase
     .from('novel_chapters')
-    .select('word_count, status')
+    .select('project_id, word_count, status')
     .in('project_id', projects?.map(p => p.id) || [])
 
   const totalChapters = chaptersData?.length || 0
@@ -52,12 +52,25 @@ export default async function DashboardPage() {
     totalWords,
   }
 
+  // Word count per project, for the overview chart
+  const wordsByProject = (projects || [])
+    .map((p) => ({
+      title: p.title,
+      words: (chaptersData || [])
+        .filter((c) => c.project_id === p.id)
+        .reduce((sum, c) => sum + (c.word_count || 0), 0),
+    }))
+    .filter((p) => p.words > 0)
+    .sort((a, b) => b.words - a.words)
+    .slice(0, 6)
+
   return (
-    <DashboardClient 
-      user={user} 
-      profile={profile} 
-      projects={projects || []} 
+    <DashboardClient
+      user={user}
+      profile={profile}
+      projects={projects || []}
       stats={stats}
+      wordsByProject={wordsByProject}
     />
   )
 }
