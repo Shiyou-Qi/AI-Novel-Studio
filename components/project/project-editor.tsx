@@ -25,6 +25,11 @@ import {
   RefreshCw,
   Users,
   Globe,
+  Target,
+  Swords,
+  Tags,
+  Quote,
+  Check,
   FileDown,
   Copy,
   FileType,
@@ -54,6 +59,26 @@ interface Project {
   words_per_chapter: number
   guidance: string | null
   status: string
+  blurb?: string | null
+}
+
+interface GoalLadderStep {
+  stage: string
+  goal: string
+  obstacle: string
+  payoff: string
+}
+
+interface AntagonistForce {
+  name: string
+  type: string
+  motivation: string
+  threatLevel: string
+}
+
+interface TitleCandidate {
+  title: string
+  rationale: string
 }
 
 interface Structure {
@@ -61,6 +86,9 @@ interface Structure {
   world_building: string
   synopsis: string
   themes: string[]
+  protagonist_goal_ladder?: GoalLadderStep[]
+  antagonist_forces?: AntagonistForce[]
+  genre_tropes?: string[]
 }
 
 interface Character {
@@ -110,12 +138,39 @@ export function ProjectEditor({ project, structure: initialStructure, characters
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [generatingProgress, setGeneratingProgress] = useState<string>('')
+  const [titleCandidates, setTitleCandidates] = useState<TitleCandidate[]>([])
+  const [blurb, setBlurb] = useState<string | null>(project.blurb ?? null)
+  const [adoptingTitle, setAdoptingTitle] = useState<string | null>(null)
 
   const router = useRouter()
   const supabase = createClient()
 
+  const adoptTitle = useCallback(async (title: string) => {
+    setAdoptingTitle(title)
+    try {
+      const { error: titleError } = await supabase
+        .from('novel_projects')
+        .update({ title })
+        .eq('id', project.id)
+      if (titleError) throw new Error(titleError.message)
+      router.refresh()
+    } catch (err) {
+      console.error('Error adopting title:', err)
+      setError(err instanceof Error ? err.message : '更新书名失败')
+    } finally {
+      setAdoptingTitle(null)
+    }
+  }, [project.id, supabase, router])
+
   // Generate structure
   const generateStructure = useCallback(async () => {
+    // Confirm before regenerating: this replaces world/plot/characters on an
+    // existing structure (and any accumulated character state in later
+    // pipeline phases), matching the same guard already used for outlines.
+    if (structure && !window.confirm('重新生成故事架构将覆盖现有的世界观、角色和已选定的书名/简介，确定要重新生成吗？')) {
+      return
+    }
+
     setError(null)
     setIsGenerating(true)
     setGeneratingProgress('正在调用 AI 生成故事架构...')
@@ -164,6 +219,9 @@ export function ProjectEditor({ project, structure: initialStructure, characters
             world_setting: data.worldSetting,
             story_synopsis: data.plotSummary,
             themes: data.themes,
+            protagonist_goal_ladder: data.protagonistGoalLadder,
+            antagonist_forces: data.antagonistForces,
+            genre_tropes: data.genreTropes,
           })
           .eq('project_id', project.id)
           .select()
@@ -183,6 +241,9 @@ export function ProjectEditor({ project, structure: initialStructure, characters
             world_setting: data.worldSetting,
             story_synopsis: data.plotSummary,
             themes: data.themes,
+            protagonist_goal_ladder: data.protagonistGoalLadder,
+            antagonist_forces: data.antagonistForces,
+            genre_tropes: data.genreTropes,
           })
           .select()
           .single()
@@ -220,13 +281,8 @@ export function ProjectEditor({ project, structure: initialStructure, characters
       }
 
       setGeneratingProgress('完成！')
-      // Update project status
-      await supabase.from('novel_projects').update({ status: 'structuring' }).eq('id', project.id)
-
-      console.log('Saved structure from DB:', savedStructure)
-      console.log('Original data from API:', data)
-      console.log('worldSetting length:', data.worldSetting?.length)
-      console.log('plotSummary length:', data.plotSummary?.length)
+      // Update project status + blurb
+      await supabase.from('novel_projects').update({ status: 'structuring', blurb: data.blurb }).eq('id', project.id)
 
       // Use the original API data for state update to ensure completeness
       setStructure({
@@ -234,13 +290,12 @@ export function ProjectEditor({ project, structure: initialStructure, characters
         world_building: data.worldSetting,  // Use API data directly
         synopsis: data.plotSummary,          // Use API data directly
         themes: data.themes,
+        protagonist_goal_ladder: data.protagonistGoalLadder || [],
+        antagonist_forces: data.antagonistForces || [],
+        genre_tropes: data.genreTropes || [],
       })
-
-      console.log('Structure state updated with lengths:', {
-        world_building_length: data.worldSetting?.length,
-        synopsis_length: data.plotSummary?.length,
-        themes_count: data.themes?.length,
-      })
+      setTitleCandidates(data.titleCandidates || [])
+      setBlurb(data.blurb || null)
     } catch (error) {
       console.error('Error generating structure:', error)
       if (error instanceof Error) {
@@ -863,6 +918,52 @@ export function ProjectEditor({ project, structure: initialStructure, characters
               </Card>
             ) : (
               <div className="grid lg:grid-cols-2 gap-6">
+                {(titleCandidates.length > 0 || blurb) && (
+                  <Card className="lg:col-span-2 bg-card/50 border-border/50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Quote className="w-5 h-5 text-primary" />
+                        书名与简介
+                      </CardTitle>
+                      <CardDescription>AI 生成的备选书名与一句话简介，点击书名即可采用</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {blurb && (
+                        <p className="text-sm text-muted-foreground italic border-l-2 border-primary/50 pl-3">
+                          {blurb}
+                        </p>
+                      )}
+                      {titleCandidates.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {titleCandidates.map((candidate) => {
+                            const isCurrent = candidate.title === project.title
+                            return (
+                              <button
+                                key={candidate.title}
+                                type="button"
+                                onClick={() => !isCurrent && adoptTitle(candidate.title)}
+                                disabled={adoptingTitle !== null}
+                                title={candidate.rationale}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-colors ${isCurrent
+                                  ? 'bg-primary/10 border-primary/50 text-primary'
+                                  : 'border-border/50 text-muted-foreground hover:text-foreground hover:border-border'
+                                  }`}
+                              >
+                                {isCurrent && <Check className="w-3.5 h-3.5" />}
+                                {adoptingTitle === candidate.title ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  candidate.title
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 <Card className="bg-card/50 border-border/50">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -918,6 +1019,70 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                     </div>
                   </CardContent>
                 </Card>
+
+                {((structure.protagonist_goal_ladder?.length ?? 0) > 0 || (structure.antagonist_forces?.length ?? 0) > 0) && (
+                  <Card className="lg:col-span-2 bg-card/50 border-border/50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="w-5 h-5 text-primary" />
+                        情节设计
+                      </CardTitle>
+                      <CardDescription>目标阶梯与对立势力，用于后续大纲与章节生成的节奏参考</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      {structure.genre_tropes && structure.genre_tropes.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Tags className="w-4 h-4 text-muted-foreground" />
+                          {structure.genre_tropes.map((trope, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">{trope}</Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      {structure.protagonist_goal_ladder && structure.protagonist_goal_ladder.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
+                            <Target className="w-3.5 h-3.5" /> 主角目标阶梯
+                          </h4>
+                          <div className="space-y-2">
+                            {structure.protagonist_goal_ladder.map((step, idx) => (
+                              <div key={idx} className="flex gap-3 text-sm p-3 bg-secondary/30 rounded-lg">
+                                <span className="text-primary font-medium shrink-0">{idx + 1}.</span>
+                                <div className="min-w-0">
+                                  <p className="text-foreground">
+                                    <span className="text-muted-foreground">[{step.stage}]</span> {step.goal}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    阻碍：{step.obstacle} · 爽点：{step.payoff}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {structure.antagonist_forces && structure.antagonist_forces.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
+                            <Swords className="w-3.5 h-3.5" /> 对立势力
+                          </h4>
+                          <div className="grid sm:grid-cols-2 gap-3">
+                            {structure.antagonist_forces.map((force, idx) => (
+                              <div key={idx} className="p-3 bg-secondary/30 rounded-lg text-sm">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-foreground">{force.name}</span>
+                                  <Badge variant="outline" className="text-xs">{force.threatLevel}</Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">{force.motivation}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 <div className="lg:col-span-2 flex justify-between">
                   <Button variant="outline" onClick={generateStructure} disabled={isGenerating}>

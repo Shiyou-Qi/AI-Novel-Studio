@@ -1,14 +1,32 @@
 import { z } from 'zod'
 
-// Phase 1 scope: schemas mirror today's existing fields exactly (mechanical
-// AI-SDK swap, zero behavior change). Agent-pipeline fields (goal ladder,
-// beat tags, etc.) are added to these in later phases.
-
 export const CharacterSchema = z.object({
   name: z.string(),
   role: z.string(),
   description: z.string(),
   motivation: z.string(),
+})
+
+// Architect Agent (Phase 3): protagonist goal ladder, antagonist forces,
+// genre tropes, and CTR-oriented title/blurb candidates - on top of the
+// original structure fields.
+export const GoalLadderStepSchema = z.object({
+  stage: z.string(),
+  goal: z.string(),
+  obstacle: z.string(),
+  payoff: z.string(),
+})
+
+export const AntagonistForceSchema = z.object({
+  name: z.string(),
+  type: z.enum(['person', 'organization', 'system', 'nature', 'self']),
+  motivation: z.string(),
+  threatLevel: z.enum(['early', 'mid', 'late', 'final']),
+})
+
+export const TitleCandidateSchema = z.object({
+  title: z.string(),
+  rationale: z.string(),
 })
 
 export const StructureOutputSchema = z.object({
@@ -17,6 +35,11 @@ export const StructureOutputSchema = z.object({
   plotSummary: z.string(),
   themes: z.array(z.string()),
   timeline: z.string(),
+  protagonistGoalLadder: z.array(GoalLadderStepSchema).min(3),
+  antagonistForces: z.array(AntagonistForceSchema).min(1),
+  genreTropes: z.array(z.string()),
+  titleCandidates: z.array(TitleCandidateSchema).min(3).max(5),
+  blurb: z.string(),
 })
 
 export const OutlineChapterSchema = z.object({

@@ -41,6 +41,9 @@ export default async function ProjectEditPage({ params }: PageProps) {
     world_building: structureData.world_setting,
     synopsis: structureData.story_synopsis,
     themes: structureData.themes,
+    protagonist_goal_ladder: structureData.protagonist_goal_ladder,
+    antagonist_forces: structureData.antagonist_forces,
+    genre_tropes: structureData.genre_tropes,
   } : null
 
   // Fetch characters (they're linked to structure_id, not project_id)
