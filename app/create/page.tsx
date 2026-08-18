@@ -109,7 +109,7 @@ export default function CreatePage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
@@ -138,7 +138,7 @@ export default function CreatePage() {
       </header>
 
       <main className="pt-14 min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-4xl">
           {/* Background effects */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
@@ -157,150 +157,160 @@ export default function CreatePage() {
             </CardHeader>
 
             <form onSubmit={handleSubmit}>
-              <CardContent className="space-y-6">
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label htmlFor="title">小说标题 *</Label>
-                  <Input
-                    id="title"
-                    placeholder="给你的小说起个名字"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    required
-                    className="bg-background/50"
-                  />
-                </div>
+              <CardContent>
+                <div className="grid md:grid-cols-5 gap-x-10 gap-y-6">
+                  {/* Left column: creative content */}
+                  <div className="md:col-span-3 space-y-6">
+                    {/* Title */}
+                    <div className="space-y-2">
+                      <Label htmlFor="title">小说标题 *</Label>
+                      <Input
+                        id="title"
+                        placeholder="给你的小说起个名字"
+                        value={formData.title}
+                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                        required
+                        className="bg-background/50"
+                      />
+                    </div>
 
-                {/* Concept */}
-                <div className="space-y-2">
-                  <Label htmlFor="concept">核心创意 *</Label>
-                  <Textarea
-                    id="concept"
-                    placeholder="描述你的故事创意、主要情节或想要表达的主题..."
-                    value={formData.concept}
-                    onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
-                    required
-                    rows={4}
-                    className="bg-background/50 resize-none"
-                  />
-                </div>
+                    {/* Concept */}
+                    <div className="space-y-2">
+                      <Label htmlFor="concept">核心创意 *</Label>
+                      <Textarea
+                        id="concept"
+                        placeholder="描述你的故事创意、主要情节或想要表达的主题..."
+                        value={formData.concept}
+                        onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
+                        required
+                        rows={6}
+                        className="bg-background/50 resize-none"
+                      />
+                    </div>
 
-                {/* Genre */}
-                <div className="space-y-2">
-                  <Label>小说类型</Label>
-                  <Select
-                    value={formData.genre}
-                    onValueChange={(value) => setFormData({ ...formData, genre: value })}
-                  >
-                    <SelectTrigger className="bg-background/50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {genres.map((genre) => (
-                        <SelectItem key={genre.value} value={genre.value}>
-                          {genre.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Target Chapters */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>预计章节数量</Label>
-                    <span className="text-sm font-medium text-primary">{formData.targetChapters} 章</span>
+                    {/* Guidance */}
+                    <div className="space-y-2">
+                      <Label htmlFor="guidance">创作指导（可选）</Label>
+                      <Textarea
+                        id="guidance"
+                        placeholder="写作风格偏好、特别要求、参考作品等..."
+                        value={formData.guidance}
+                        onChange={(e) => setFormData({ ...formData, guidance: e.target.value })}
+                        rows={4}
+                        className="bg-background/50 resize-none"
+                      />
+                    </div>
                   </div>
-                  <Slider
-                    value={[formData.targetChapters]}
-                    onValueChange={([value]) => setFormData({ ...formData, targetChapters: value })}
-                    min={3}
-                    max={999}
-                    step={1}
-                    className="py-2"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>短篇 (3章)</span>
-                    <span>中篇 (50章)</span>
-                    <span>长篇 (999章)</span>
-                  </div>
-                </div>
 
-                {/* Words Per Chapter */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>每章字数</Label>
-                    <span className="text-sm font-medium text-primary">{formData.wordsPerChapter} 字</span>
-                  </div>
-                  <Slider
-                    value={[formData.wordsPerChapter]}
-                    onValueChange={([value]) => setFormData({ ...formData, wordsPerChapter: value })}
-                    min={500}
-                    max={10000}
-                    step={100}
-                    className="py-2"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>500字</span>
-                    <span>5000字</span>
-                    <span>10000字</span>
-                  </div>
-                </div>
+                  {/* Right column: generation settings */}
+                  <div className="md:col-span-2 space-y-6">
+                    {/* Genre */}
+                    <div className="space-y-2">
+                      <Label>小说类型</Label>
+                      <Select
+                        value={formData.genre}
+                        onValueChange={(value) => setFormData({ ...formData, genre: value })}
+                      >
+                        <SelectTrigger className="bg-background/50 w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {genres.map((genre) => (
+                            <SelectItem key={genre.value} value={genre.value}>
+                              {genre.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {/* Guidance */}
-                <div className="space-y-2">
-                  <Label htmlFor="guidance">创作指导（可选）</Label>
-                  <Textarea
-                    id="guidance"
-                    placeholder="写作风格偏好、特别要求、参考作品等..."
-                    value={formData.guidance}
-                    onChange={(e) => setFormData({ ...formData, guidance: e.target.value })}
-                    rows={3}
-                    className="bg-background/50 resize-none"
-                  />
-                </div>
+                    {/* Target Chapters */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>预计章节数量</Label>
+                        <span className="text-sm font-medium text-primary">{formData.targetChapters} 章</span>
+                      </div>
+                      <Slider
+                        value={[formData.targetChapters]}
+                        onValueChange={([value]) => setFormData({ ...formData, targetChapters: value })}
+                        min={3}
+                        max={999}
+                        step={1}
+                        className="py-2"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>短篇 (3章)</span>
+                        <span>中篇 (50章)</span>
+                        <span>长篇 (999章)</span>
+                      </div>
+                    </div>
 
-                {/* Summary */}
-                <div className="p-4 bg-secondary/30 rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    预计总字数约{' '}
-                    <span className="font-medium text-foreground">
-                      {(formData.targetChapters * formData.wordsPerChapter).toLocaleString()}
-                    </span>{' '}
-                    字
-                  </p>
+                    {/* Words Per Chapter */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>每章字数</Label>
+                        <span className="text-sm font-medium text-primary">{formData.wordsPerChapter} 字</span>
+                      </div>
+                      <Slider
+                        value={[formData.wordsPerChapter]}
+                        onValueChange={([value]) => setFormData({ ...formData, wordsPerChapter: value })}
+                        min={500}
+                        max={10000}
+                        step={100}
+                        className="py-2"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>500字</span>
+                        <span>5000字</span>
+                        <span>10000字</span>
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    <div className="p-4 bg-secondary/30 rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        预计总字数约{' '}
+                        <span className="font-medium text-foreground">
+                          {(formData.targetChapters * formData.wordsPerChapter).toLocaleString()}
+                        </span>{' '}
+                        字
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Submit */}
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  size="lg"
-                  disabled={creating || !formData.title.trim() || !formData.concept.trim()}
-                >
-                  {creating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      创建中...
-                    </>
-                  ) : user ? (
-                    <>
-                      开始创作
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4 mr-2" />
-                      登录后创建
-                    </>
-                  )}
-                </Button>
+                <div className="mt-8 space-y-3">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    size="lg"
+                    disabled={creating || !formData.title.trim() || !formData.concept.trim()}
+                  >
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        创建中...
+                      </>
+                    ) : user ? (
+                      <>
+                        开始创作
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-4 h-4 mr-2" />
+                        登录后创建
+                      </>
+                    )}
+                  </Button>
 
-                {!user && (
-                  <p className="text-xs text-center text-muted-foreground">
-                    需要登录才能保存你的创作进度
-                  </p>
-                )}
+                  {!user && (
+                    <p className="text-xs text-center text-muted-foreground">
+                      需要登录才能保存你的创作进度
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </form>
           </Card>
