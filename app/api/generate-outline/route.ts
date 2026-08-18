@@ -1,14 +1,14 @@
 
-import { chatCompletion, DEEPSEEK_MODELS } from '@/lib/deepseek';
-import { tryRepairAndParseJson } from '@/lib/utils';
+import { generateValidatedJson } from '@/lib/ai/generate-json';
+import { OutlineOutputSchema } from '@/lib/ai/schemas';
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     console.log('Received outline request:', JSON.stringify(body, null, 2))
-    
+
     const { title, theme, genre, structure, targetChapters, guidance, startChapter, totalChapters, previousChapters } = body
-    
+
     // Validate required fields
     if (!title || !genre || !structure || !targetChapters) {
       console.error('Missing required fields:', { title: !!title, genre: !!genre, structure: !!structure, targetChapters: !!targetChapters })
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
-    
+
     if (!structure.worldSetting || !structure.plotSummary) {
       console.error('Invalid structure:', structure)
       return Response.json(
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
-    
+
     if (!structure.mainCharacters || !Array.isArray(structure.mainCharacters) || structure.mainCharacters.length === 0) {
       console.error('No characters in structure:', structure.mainCharacters)
       return Response.json(
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     }
 
     const batchInfo = startChapter ? `第 ${startChapter} 到 ${startChapter + targetChapters - 1} 章（共 ${totalChapters} 章）` : `${targetChapters} 章`
-    const previousContext = previousChapters && previousChapters.length > 0 
+    const previousContext = previousChapters && previousChapters.length > 0
       ? `\n\n【前文章节】\n${previousChapters.map((c: any) => `第${c.number}章 ${c.title}：${c.outline}`).join('\n\n')}\n\n请确保后续章节与前文连贯，情节自然衔接。`
       : ''
 
@@ -63,7 +63,7 @@ JSON 结构如下：
 世界观：${structure.worldSetting}
 
 主要角色：
-${structure.mainCharacters.map((c: { name: string; role: string; description: string; motivation: string }) => 
+${structure.mainCharacters.map((c: { name: string; role: string; description: string; motivation: string }) =>
   `- ${c.name}（${c.role}）：${c.description}。动机：${c.motivation}`
 ).join('\n')}
 
@@ -83,29 +83,20 @@ ${startChapter ? `6. 这是第 ${startChapter} 到 ${startChapter + targetChapte
 
 请直接返回 JSON 数据，必须包含 ${targetChapters} 个章节。`;
 
-    const content = await chatCompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      model: DEEPSEEK_MODELS.chat,
-      jsonMode: true
-    });
-
     let result;
     try {
-      result = tryRepairAndParseJson(content);
-      
-      if (!result || !result.chapters || !Array.isArray(result.chapters)) {
-        console.error('Invalid AI response structure:', result);
-        throw new Error('AI 返回的数据结构不正确，缺少章节列表');
-      }
+      result = await generateValidatedJson({
+        schema: OutlineOutputSchema,
+        system: systemPrompt,
+        prompt: userPrompt,
+      });
     } catch (e) {
-      console.error('Failed to parse AI response. Content:', content);
+      console.error('Failed to generate/parse outline:', e);
       throw new Error(e instanceof Error ? e.message : 'AI 返回的数据格式不正确');
     }
 
     // Add IDs and default status to chapters
-    const chaptersWithMeta = result.chapters.map((ch: any, index: number) => ({
+    const chaptersWithMeta = result.chapters.map((ch, index) => ({
       ...ch,
       id: crypto.randomUUID(),
       number: index + 1,

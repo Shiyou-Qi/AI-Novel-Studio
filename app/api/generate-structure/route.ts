@@ -1,6 +1,6 @@
 
-import { chatCompletion, DEEPSEEK_MODELS } from '@/lib/deepseek';
-import { parseAIResponse } from '@/lib/utils';
+import { generateValidatedJson } from '@/lib/ai/generate-json';
+import { StructureOutputSchema } from '@/lib/ai/schemas';
 
 export async function POST(req: Request) {
   try {
@@ -37,26 +37,11 @@ ${guidance ? `创作指导：${guidance}` : ''}
 
 请直接返回 JSON 数据。`;
 
-    const content = await chatCompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      model: DEEPSEEK_MODELS.chat,
-      jsonMode: true
+    const structure = await generateValidatedJson({
+      schema: StructureOutputSchema,
+      system: systemPrompt,
+      prompt: userPrompt,
     });
-
-    let structure;
-    try {
-      structure = parseAIResponse(content);
-      
-      if (!structure || !structure.worldSetting || !structure.plotSummary) {
-        console.error('Invalid AI structure response:', structure);
-        throw new Error('AI 返回的故事架构不完整');
-      }
-    } catch (e) {
-      console.error('Failed to parse AI response:', content);
-      throw new Error(e instanceof Error ? e.message : 'AI 返回的数据格式不正确');
-    }
 
     return Response.json({ structure });
   } catch (error) {

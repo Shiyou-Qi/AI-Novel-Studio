@@ -399,15 +399,19 @@ export function ProjectEditor({ project, structure: initialStructure, characters
     setGeneratingProgress(`正在生成第 ${chapter.chapter_number} 章内容...`)
 
     try {
-      const previousChapters = chapters.slice(0, chapterIndex).map(c => ({
-        title: c.title,
-        summary: c.outline,
-      }))
+      const prevChapter = chapterIndex > 0 ? chapters[chapterIndex - 1] : null
+      const previousChapter = prevChapter ? {
+        number: prevChapter.chapter_number,
+        title: prevChapter.title,
+        outline: prevChapter.outline,
+      } : undefined
 
       const requestBody = {
         title: project.title,
+        theme: project.concept,
         genre: project.genre,
         wordsPerChapter: project.words_per_chapter,
+        guidance: project.guidance,
         structure: {
           worldSetting: structure.world_building,
           synopsis: structure.synopsis,
@@ -418,7 +422,7 @@ export function ProjectEditor({ project, structure: initialStructure, characters
           title: chapter.title,
           outline: chapter.outline,
         },
-        previousChapters,
+        previousChapter,
       }
 
       console.log(`Generating chapter ${chapter.chapter_number}:`, chapter.title)
@@ -446,24 +450,8 @@ export function ProjectEditor({ project, structure: initialStructure, characters
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.content) {
-                fullContent += parsed.content
-                setStreamingContent(fullContent)
-              }
-            } catch {
-              // Skip invalid JSON
-            }
-          }
-        }
+        fullContent += decoder.decode(value, { stream: true })
+        setStreamingContent(fullContent)
       }
 
       setGeneratingProgress(`正在保存第 ${chapter.chapter_number} 章...`)

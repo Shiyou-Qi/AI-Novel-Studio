@@ -1,5 +1,6 @@
 
-import { streamChatCompletion, DEEPSEEK_MODELS } from '@/lib/deepseek';
+import { streamText } from 'ai';
+import { deepseek, DEEPSEEK_MODELS } from '@/lib/ai/deepseek-provider';
 
 export async function POST(req: Request) {
   try {
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
 【故事架构】
 世界观：${structure.worldSetting}
 主要角色：
-${structure.mainCharacters.map((c: { name: string; role: string; description: string; motivation: string }) => 
+${structure.mainCharacters.map((c: { name: string; role: string; description: string; motivation: string }) =>
   `- ${c.name}（${c.role}）：${c.description}`
 ).join('\n')}
 
@@ -43,60 +44,14 @@ ${guidance ? `【创作指导】${guidance}` : ''}
 
 请开始创作本章正文：`;
 
-    const stream = await streamChatCompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      model: DEEPSEEK_MODELS.chat,
-      temperature: 0.8
+    const result = streamText({
+      model: deepseek(DEEPSEEK_MODELS.flash),
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 0.8,
     });
 
-    // Create a TransformStream to convert DeepSeek/OpenAI format to the custom format expected by the frontend
-    // Frontend expects: data: {"content": "..."}
-    // DeepSeek returns: data: {"choices":[{"delta":{"content":"..."}}]}
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    
-    const transformStream = new TransformStream({
-      async transform(chunk, controller) {
-        const text = decoder.decode(chunk);
-        const lines = text.split('\n');
-        
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            continue;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              // Re-format to what the frontend expects
-              const payload = JSON.stringify({ content });
-              controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-            }
-          } catch (e) {
-            // Ignore parse errors for partial chunks
-          }
-        }
-      }
-    });
-
-    if (!stream) throw new Error('No stream returned');
-
-    return new Response(stream.pipeThrough(transformStream), {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
-
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error('Error generating chapter:', error);
     return Response.json(
