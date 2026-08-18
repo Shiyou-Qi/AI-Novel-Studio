@@ -4,9 +4,11 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useChapterPipeline, type PipelineMode } from '@/hooks/use-chapter-pipeline'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -36,6 +38,12 @@ import {
   FileJson,
   FileCode,
   FileArchive,
+  Bot,
+  Play,
+  Square,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
 } from 'lucide-react'
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx'
 import { saveAs } from 'file-saver'
@@ -61,6 +69,7 @@ interface Project {
   status: string
   blurb?: string | null
   hook_cadence?: number
+  pipeline_mode?: PipelineMode
 }
 
 interface OutlineChapterData {
@@ -133,6 +142,8 @@ interface Chapter {
   beat_type?: string | null
   hook_notes?: string | null
   is_golden_chapter?: boolean
+  quality_score?: number | null
+  needs_review?: boolean
 }
 
 interface ProjectEditorProps {
@@ -196,6 +207,45 @@ export function ProjectEditor({ project, structure: initialStructure, characters
       setAdoptingTitle(null)
     }
   }, [project.id, supabase, router])
+
+  // Agent pipeline (Hook Doctor / Continuity Checker / Quality Critic / Reviser)
+  const [pipelineMode, setPipelineMode] = useState<PipelineMode>(project.pipeline_mode || 'fast')
+  const [pipelineRunCount, setPipelineRunCount] = useState(3)
+  const [showPipelineLog, setShowPipelineLog] = useState(false)
+
+  const pipeline = useChapterPipeline({
+    supabase,
+    projectId: project.id,
+    projectTitle: project.title,
+    theme: project.concept,
+    genre: project.genre,
+    wordsPerChapter: project.words_per_chapter,
+    guidance: project.guidance,
+    structure: {
+      worldSetting: structure?.world_building || '',
+      plotSummary: structure?.synopsis || '',
+      mainCharacters: characters,
+    },
+    onChapterContentUpdate: (chapterId, content) => {
+      setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, content, word_count: content.length } : c))
+    },
+    onChapterPersisted: (chapterId, patch) => {
+      setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, ...patch } : c))
+    },
+  })
+
+  const changePipelineMode = useCallback(async (mode: PipelineMode) => {
+    setPipelineMode(mode)
+    await supabase.from('novel_projects').update({ pipeline_mode: mode }).eq('id', project.id)
+  }, [project.id, supabase])
+
+  const runPipeline = useCallback(() => {
+    const startIdx = activeChapter
+    const targets = chapters.slice(startIdx, startIdx + pipelineRunCount)
+    if (targets.length === 0) return
+    setShowPipelineLog(true)
+    pipeline.runRange(targets, pipelineMode)
+  }, [activeChapter, chapters, pipelineRunCount, pipelineMode, pipeline])
 
   // Generate structure
   const generateStructure = useCallback(async () => {
@@ -1310,6 +1360,92 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                 </CardContent>
               </Card>
             )}
+
+            {/* Agent pipeline controls */}
+            <Card className="bg-card/50 border-border/50">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-primary" />
+                  Agent 流水线
+                </CardTitle>
+                <CardDescription>
+                  从当前章节开始，依次起草并（精品模式下）自动检查钩子、连贯性与质量，必要时自动修订
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex rounded-lg border border-border/50 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => changePipelineMode('fast')}
+                      disabled={pipeline.isRunning}
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${pipelineMode === 'fast' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      快速模式
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changePipelineMode('quality')}
+                      disabled={pipeline.isRunning}
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${pipelineMode === 'quality' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      精品模式
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">从第 {currentChapter?.chapter_number} 章开始，运行</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={pipelineRunCount}
+                      onChange={(e) => setPipelineRunCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                      disabled={pipeline.isRunning}
+                      className="w-16 h-8 bg-background/50"
+                    />
+                    <span className="text-muted-foreground">章</span>
+                  </div>
+
+                  {pipeline.isRunning ? (
+                    <Button variant="destructive" size="sm" onClick={pipeline.stop}>
+                      <Square className="w-3.5 h-3.5 mr-2" />
+                      停止
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={runPipeline}>
+                      <Play className="w-3.5 h-3.5 mr-2" />
+                      运行流水线
+                    </Button>
+                  )}
+
+                  <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" onClick={() => setShowPipelineLog(v => !v)}>
+                    {showPipelineLog ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+                    进度日志 {pipeline.log.length > 0 && `(${pipeline.log.length})`}
+                  </Button>
+                </div>
+
+                {pipeline.isRunning && pipeline.currentLabel && (
+                  <p className="text-sm text-primary animate-pulse">{pipeline.currentLabel}</p>
+                )}
+
+                {showPipelineLog && pipeline.log.length > 0 && (
+                  <ScrollArea className="h-40 rounded-lg border border-border/50 bg-secondary/20 p-3">
+                    <div className="space-y-1 text-xs font-mono">
+                      {pipeline.log.map((entry, idx) => (
+                        <div key={idx} className="text-muted-foreground">
+                          <span className="text-primary">第{entry.chapterNumber}章</span>
+                          {' '}
+                          <span className="text-foreground">[{entry.stage}]</span>
+                          {' '}{entry.message}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="flex gap-6 min-h-[calc(100vh-16rem)]">
               {/* Chapter list sidebar */}
               <Card className="w-64 flex-shrink-0 bg-card/50 border-border/50 sticky top-24 h-[calc(100vh-10rem)]">
@@ -1338,9 +1474,24 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                         <div className="flex items-center justify-between">
                           <span className="truncate">第{chapter.chapter_number}章</span>
                           <div className="flex items-center gap-1">
-                            {chapter.status === 'completed' && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                            {typeof chapter.quality_score === 'number' && (
+                              <span
+                                title={`质量评分：${chapter.quality_score}/100`}
+                                className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${chapter.quality_score >= 70 ? 'bg-chart-1/10 text-chart-1' : 'bg-amber-500/10 text-amber-500'}`}
+                              >
+                                {chapter.quality_score}
+                              </span>
                             )}
+                            {chapter.needs_review && (
+                              <span title="待人工复核">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                              </span>
+                            )}
+                            {chapter.status === 'completed' ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                            ) : chapter.status !== 'pending' ? (
+                              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin flex-shrink-0" />
+                            ) : null}
                             {chapter.content && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

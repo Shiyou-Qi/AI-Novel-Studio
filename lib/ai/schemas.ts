@@ -80,3 +80,51 @@ export const OutlineOutputSchema = z.object({
   newPlotThreads: z.array(NewPlotThreadSchema),
   threadUpdates: z.array(ThreadUpdateSchema),
 })
+
+// Chapter quality pipeline (Phase 5): Hook Doctor, Continuity Checker,
+// Quality Critic. All boolean/enum/number fields use the same preprocess-to-
+// safe-default pattern as the outline schema, for the same reason (tolerate
+// occasional field drops rather than failing the whole call).
+export const HookDoctorOutputSchema = z.object({
+  needsRewrite: z.preprocess((val) => val ?? false, z.boolean()),
+  rewrittenEnding: z.string().nullable(),
+  techniqueUsed: z.preprocess((val) => val ?? '', z.string()),
+  rationale: z.preprocess((val) => val ?? '', z.string()),
+})
+
+export const ContinuityIssueSchema = z.object({
+  severity: z.preprocess((val) => val ?? 'minor', z.enum(['minor', 'major'])),
+  description: z.string(),
+  suggestion: z.string(),
+})
+
+export const CharacterStateUpdateSchema = z.object({
+  characterName: z.string(),
+  updatedState: z.string(),
+  relationshipChanges: z.string().nullable(),
+})
+
+export const ContinuityThreadUpdateSchema = z.object({
+  threadId: z.string(),
+  newStatus: z.preprocess((val) => val ?? 'reinforced', z.enum(['reinforced', 'paid_off', 'abandoned'])),
+  note: z.string(),
+})
+
+export const ContinuityCheckOutputSchema = z.object({
+  issues: z.array(ContinuityIssueSchema),
+  characterStateUpdates: z.array(CharacterStateUpdateSchema),
+  newWorldFacts: z.array(z.string()),
+  threadUpdates: z.array(ContinuityThreadUpdateSchema),
+})
+
+const scoreField = z.preprocess((val) => val ?? 60, z.number().int().min(0).max(100))
+
+export const QualityScoreSchema = z.object({
+  hookStrength: scoreField,
+  pacing: scoreField,
+  satisfactionDensity: scoreField,
+  dialogueNaturalness: scoreField,
+  showVsTell: scoreField,
+  overall: scoreField,
+  notes: z.array(z.string()),
+})

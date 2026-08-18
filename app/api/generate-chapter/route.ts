@@ -1,10 +1,11 @@
 
 import { streamText } from 'ai';
 import { deepseek, DEEPSEEK_MODELS } from '@/lib/ai/deepseek-provider';
+import { buildDraftAddendum } from '@/lib/ai/prompts/draft';
 
 export async function POST(req: Request) {
   try {
-    const { title, theme, genre, structure, chapter, wordsPerChapter, previousChapter, guidance } = await req.json();
+    const { title, theme, genre, structure, chapter, wordsPerChapter, previousChapter, guidance, worldFacts, characterStates, beatType, isGoldenChapter } = await req.json();
 
     // Validate structure and characters
     if (!structure || !structure.mainCharacters || !Array.isArray(structure.mainCharacters)) {
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
 3. 对话自然流畅，符合人物性格
 4. 确保情节连贯，与上一章（如果有）衔接自然
 5. 字数控制在 ${wordsPerChapter} 字左右
-6. 直接输出正文内容，不要包含标题或其他解释性文字`;
+6. 直接输出正文内容，不要包含标题或其他解释性文字
+
+${buildDraftAddendum({ worldFacts, characterStates, beatType, isGoldenChapter })}`;
 
     const userPrompt = `【小说信息】
 标题：${title}
