@@ -768,23 +768,23 @@ export function ProjectEditor({ project, structure: initialStructure, characters
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button variant="ghost" size="icon" asChild className="shrink-0">
               <Link href="/dashboard">
                 <ArrowLeft className="w-5 h-5" />
               </Link>
             </Button>
-            <div>
-              <h1 className="font-semibold text-foreground">{project.title}</h1>
-              <p className="text-xs text-muted-foreground">
+            <div className="min-w-0">
+              <h1 className="font-semibold text-foreground text-[15px] truncate">{project.title}</h1>
+              <p className="text-xs text-muted-foreground tabular-nums">
                 {completedChapters}/{chapters.length} 章节 · {totalWords.toLocaleString()} 字
               </p>
             </div>
           </div>
 
           {/* Step indicators */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-1 shrink-0">
             {steps.map((step, idx) => {
               const isActive = currentStep === step.key
               const isPast = steps.findIndex(s => s.key === currentStep) > idx
@@ -798,16 +798,16 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                       setCurrentStep(step.key)
                     }
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${isActive
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
                     ? 'bg-primary text-primary-foreground'
                     : isPast
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
+                      ? 'text-primary hover:bg-primary/10'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
                     }`}
                 >
-                  <step.icon className="w-4 h-4" />
-                  <span className="text-sm">{step.label}</span>
-                  {idx < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-1 opacity-50" />}
+                  {isPast ? <CheckCircle2 className="w-4 h-4" /> : <step.icon className="w-4 h-4" />}
+                  <span>{step.label}</span>
+                  {idx < steps.length - 1 && <ChevronRight className="w-4 h-4 ml-0.5 opacity-40" />}
                 </button>
               )
             })}
@@ -815,7 +815,7 @@ export function ProjectEditor({ project, structure: initialStructure, characters
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Structure Step */}
         {currentStep === 'structure' && (
           <div className="space-y-6">
