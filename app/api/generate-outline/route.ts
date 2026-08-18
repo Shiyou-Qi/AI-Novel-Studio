@@ -1,13 +1,14 @@
 
 import { generateValidatedJson } from '@/lib/ai/generate-json';
 import { OutlineOutputSchema } from '@/lib/ai/schemas';
+import { buildOutlineAddendum, type OpenThread } from '@/lib/ai/prompts/outline';
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     console.log('Received outline request:', JSON.stringify(body, null, 2))
 
-    const { title, theme, genre, structure, targetChapters, guidance, startChapter, totalChapters, previousChapters } = body
+    const { title, theme, genre, structure, targetChapters, guidance, startChapter, totalChapters, previousChapters, hookCadence, openThreads } = body
 
     // Validate required fields
     if (!title || !genre || !structure || !targetChapters) {
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
       )
     }
 
+    const batchStart = startChapter || 1
     const batchInfo = startChapter ? `第 ${startChapter} 到 ${startChapter + targetChapters - 1} 章（共 ${totalChapters} 章）` : `${targetChapters} 章`
     const previousContext = previousChapters && previousChapters.length > 0
       ? `\n\n【前文章节】\n${previousChapters.map((c: any) => `第${c.number}章 ${c.title}：${c.outline}`).join('\n\n')}\n\n请确保后续章节与前文连贯，情节自然衔接。`
@@ -47,12 +49,27 @@ JSON 结构如下：
     {
       "number": 1,
       "title": "章节标题",
-      "outline": "章节大纲，详细描述本章的主要情节、人物互动和关键事件"
+      "outline": "章节大纲，详细描述本章的主要情节、人物互动和关键事件",
+      "beatType": "setup|rising|satisfaction|suspense|twist|cliffhanger",
+      "hookNote": "本章结尾使用的钩子手法说明",
+      "isGoldenChapter": false
     }
+  ],
+  "newPlotThreads": [
+    { "title": "伏笔标题", "description": "描述", "plantedChapter": 1, "intendedPayoffChapter": 5, "importance": "minor|major" }
+  ],
+  "threadUpdates": [
+    { "threadId": "已有伏笔的ID", "status": "reinforced|paid_off", "note": "呼应/回收说明" }
   ]
 }
 
-注意：返回的章节数量必须是 ${targetChapters} 章。`;
+注意：返回的章节数量必须是 ${targetChapters} 章。
+
+${buildOutlineAddendum({
+  hookCadence: hookCadence || 3,
+  startChapter: batchStart,
+  openThreads: (openThreads || []) as OpenThread[],
+})}`;
 
     const userPrompt = `【小说信息】
 标题：${title}
@@ -99,13 +116,17 @@ ${startChapter ? `6. 这是第 ${startChapter} 到 ${startChapter + targetChapte
     const chaptersWithMeta = result.chapters.map((ch, index) => ({
       ...ch,
       id: crypto.randomUUID(),
-      number: index + 1,
+      number: batchStart + index,
       content: '',
       wordCount: 0,
       status: 'outline' as const,
     }));
 
-    return Response.json({ chapters: chaptersWithMeta });
+    return Response.json({
+      chapters: chaptersWithMeta,
+      newPlotThreads: result.newPlotThreads,
+      threadUpdates: result.threadUpdates,
+    });
   } catch (error) {
     console.error('Error generating outline details:', error);
     if (error instanceof Error) {

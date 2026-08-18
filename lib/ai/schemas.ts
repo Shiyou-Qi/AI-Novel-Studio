@@ -42,12 +42,41 @@ export const StructureOutputSchema = z.object({
   blurb: z.string(),
 })
 
+// Outline/Pacing Agent (Phase 4): per-chapter beat tagging + foreshadowing
+// thread planting/payoff tracking, on top of the original title/outline.
+export const BeatTypeEnum = z.enum(['setup', 'rising', 'satisfaction', 'suspense', 'twist', 'cliffhanger'])
+// UI label map: setup:'铺垫' rising:'上升' satisfaction:'爽点' suspense:'悬念' twist:'反转' cliffhanger:'悬念钩子'
+
+// beatType/isGoldenChapter use preprocess to tolerate the model occasionally
+// omitting or null-ing a field across a 10-chapter/6-field batch response -
+// coercing to a safe default beats failing (and re-prompting for) the whole
+// batch over one dropped boolean. hookNote is allowed empty for the same
+// reason; it's cosmetic (drives a UI caption), not structurally load-bearing.
 export const OutlineChapterSchema = z.object({
   number: z.number().int(),
   title: z.string(),
   outline: z.string(),
+  beatType: z.preprocess((val) => val ?? 'setup', BeatTypeEnum),
+  hookNote: z.preprocess((val) => val ?? '', z.string()),
+  isGoldenChapter: z.preprocess((val) => val ?? false, z.boolean()),
+})
+
+export const NewPlotThreadSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  plantedChapter: z.number().int(),
+  intendedPayoffChapter: z.number().int().nullable(),
+  importance: z.enum(['minor', 'major']),
+})
+
+export const ThreadUpdateSchema = z.object({
+  threadId: z.string(),
+  status: z.enum(['reinforced', 'paid_off']),
+  note: z.string(),
 })
 
 export const OutlineOutputSchema = z.object({
   chapters: z.array(OutlineChapterSchema).min(1),
+  newPlotThreads: z.array(NewPlotThreadSchema),
+  threadUpdates: z.array(ThreadUpdateSchema),
 })

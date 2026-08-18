@@ -60,6 +60,29 @@ interface Project {
   guidance: string | null
   status: string
   blurb?: string | null
+  hook_cadence?: number
+}
+
+interface OutlineChapterData {
+  title: string
+  outline: string
+  beatType: string
+  hookNote: string
+  isGoldenChapter: boolean
+}
+
+interface NewPlotThread {
+  title: string
+  description: string
+  plantedChapter: number
+  intendedPayoffChapter: number | null
+  importance: 'minor' | 'major'
+}
+
+interface ThreadUpdate {
+  threadId: string
+  status: 'reinforced' | 'paid_off'
+  note: string
 }
 
 interface GoalLadderStep {
@@ -107,6 +130,9 @@ interface Chapter {
   content: string
   word_count: number
   status: string
+  beat_type?: string | null
+  hook_notes?: string | null
+  is_golden_chapter?: boolean
 }
 
 interface ProjectEditorProps {
@@ -122,6 +148,15 @@ const steps = [
   { key: 'write', label: '章节写作', icon: PenTool },
   { key: 'export', label: '导出', icon: Download },
 ]
+
+const BEAT_TYPE_LABELS: Record<string, { label: string; className: string }> = {
+  setup: { label: '铺垫', className: 'bg-muted text-muted-foreground' },
+  rising: { label: '上升', className: 'bg-chart-3/10 text-chart-3' },
+  satisfaction: { label: '爽点', className: 'bg-chart-1/10 text-chart-1' },
+  suspense: { label: '悬念', className: 'bg-chart-2/10 text-chart-2' },
+  twist: { label: '反转', className: 'bg-chart-5/10 text-chart-5' },
+  cliffhanger: { label: '悬念钩子', className: 'bg-primary/10 text-primary' },
+}
 
 export function ProjectEditor({ project, structure: initialStructure, characters: initialCharacters, chapters: initialChapters }: ProjectEditorProps) {
   const [currentStep, setCurrentStep] = useState(() => {
@@ -355,7 +390,18 @@ export function ProjectEditor({ project, structure: initialStructure, characters
       // Only delete if not resuming
       if (!isResume) {
         await supabase.from('novel_chapters').delete().eq('project_id', project.id)
+        await supabase.from('novel_plot_threads').delete().eq('project_id', project.id)
       }
+
+      // Open plot threads accumulate across batches within this run (new
+      // threads planted in batch N are visible to batch N+1's prompt), and
+      // start from whatever's already open in the DB when resuming.
+      const { data: existingThreads } = await supabase
+        .from('novel_plot_threads')
+        .select('id, title, description')
+        .eq('project_id', project.id)
+        .in('status', ['planted', 'reinforced'])
+      let openThreads = (existingThreads || []).map(t => ({ id: t.id, title: t.title, description: t.description || '' }))
 
       for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
         const startChapter = currentChapterCount + batchIndex * batchSize + 1
@@ -372,6 +418,8 @@ export function ProjectEditor({ project, structure: initialStructure, characters
           startChapter: startChapter,
           totalChapters: totalChapters,
           guidance: project.guidance,
+          hookCadence: project.hook_cadence || 3,
+          openThreads,
           structure: {
             worldSetting: structure.world_building,
             plotSummary: structure.synopsis,
@@ -402,11 +450,17 @@ export function ProjectEditor({ project, structure: initialStructure, characters
         setGeneratingProgress(`正在保存第 ${startChapter}-${endChapter} 章...`)
         const { data: savedChapters, error: saveError } = await supabase
           .from('novel_chapters')
-          .insert(data.chapters.map((c: { title: string; outline: string }, idx: number) => ({
+          .insert(data.chapters.map((c: OutlineChapterData, idx: number) => ({
             project_id: project.id,
             chapter_number: startChapter + idx,
             title: c.title,
             outline: c.outline,
+            // Defensive fallback: the schema layer already coerces these,
+            // but is_golden_chapter is NOT NULL in the DB - never let a
+            // gap here turn into a failed insert for the whole batch.
+            beat_type: c.beatType ?? null,
+            hook_notes: c.hookNote ?? null,
+            is_golden_chapter: c.isGoldenChapter ?? false,
             content: '',
             word_count: 0,
             status: 'pending',
@@ -422,6 +476,42 @@ export function ProjectEditor({ project, structure: initialStructure, characters
 
         // 更新UI显示已生成的章节
         setChapters(allChapters)
+
+        // 保存新伏笔 + 更新已有伏笔状态
+        if (data.newPlotThreads?.length > 0) {
+          const { data: insertedThreads } = await supabase
+            .from('novel_plot_threads')
+            .insert(data.newPlotThreads.map((t: NewPlotThread) => ({
+              project_id: project.id,
+              title: t.title,
+              description: t.description,
+              planted_chapter: t.plantedChapter,
+              intended_payoff_chapter: t.intendedPayoffChapter,
+              importance: t.importance,
+            })))
+            .select('id, title, description')
+          if (insertedThreads) {
+            openThreads = [...openThreads, ...insertedThreads.map(t => ({ id: t.id, title: t.title, description: t.description || '' }))]
+          }
+        }
+
+        if (data.threadUpdates?.length > 0) {
+          for (const update of data.threadUpdates as ThreadUpdate[]) {
+            // Defensive: only trust threadIds we actually handed the model as
+            // open threads, since the model could otherwise invent one.
+            if (!openThreads.some(t => t.id === update.threadId)) continue
+            await supabase
+              .from('novel_plot_threads')
+              .update({
+                status: update.status,
+                actual_payoff_chapter: update.status === 'paid_off' ? endChapter : undefined,
+              })
+              .eq('id', update.threadId)
+            if (update.status === 'paid_off') {
+              openThreads = openThreads.filter(t => t.id !== update.threadId)
+            }
+          }
+        }
       }
 
       setGeneratingProgress('完成！')
@@ -1169,22 +1259,36 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                   </div>
                 </div>
                 <div className="grid gap-3">
-                  {chapters.map((chapter) => (
-                    <Card key={chapter.id} className="bg-card/50 border-border/50">
-                      <CardHeader className="py-3">
-                        <CardTitle className="text-base flex items-center gap-2">
-                          <span className="text-primary">第{chapter.chapter_number}章</span>
-                          {chapter.title}
-                          {chapter.status === 'completed' && (
-                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  {chapters.map((chapter) => {
+                    const beat = chapter.beat_type ? BEAT_TYPE_LABELS[chapter.beat_type] : null
+                    return (
+                      <Card key={chapter.id} className="bg-card/50 border-border/50">
+                        <CardHeader className="py-3">
+                          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+                            <span className="text-primary">第{chapter.chapter_number}章</span>
+                            {chapter.title}
+                            {chapter.is_golden_chapter && (
+                              <Badge className="text-xs font-normal bg-accent/10 text-accent">
+                                <Sparkles className="w-3 h-3 mr-1" /> 黄金三章
+                              </Badge>
+                            )}
+                            {beat && (
+                              <Badge className={`text-xs font-normal ${beat.className}`}>{beat.label}</Badge>
+                            )}
+                            {chapter.status === 'completed' && (
+                              <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0 space-y-1.5">
+                          <p className="text-sm text-muted-foreground">{chapter.outline}</p>
+                          {chapter.hook_notes && (
+                            <p className="text-xs text-muted-foreground/80 italic">钩子：{chapter.hook_notes}</p>
                           )}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <p className="text-sm text-muted-foreground">{chapter.outline}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
               </div>
             )}
