@@ -1,6 +1,6 @@
 'use client'
 
-import { GENRE_OPTIONS } from '@/lib/types'
+import { GENRE_OPTIONS } from '@/lib/genres'
 import { Badge } from '@/components/ui/badge'
 
 export function GenresSection() {

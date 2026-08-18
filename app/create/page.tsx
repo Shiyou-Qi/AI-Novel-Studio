@@ -28,19 +28,7 @@ import {
   LogIn,
 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
-
-const genres = [
-  { value: 'fantasy', label: '玄幻' },
-  { value: 'wuxia', label: '武侠' },
-  { value: 'scifi', label: '科幻' },
-  { value: 'romance', label: '言情' },
-  { value: 'urban', label: '都市' },
-  { value: 'history', label: '历史' },
-  { value: 'mystery', label: '悬疑' },
-  { value: 'horror', label: '恐怖' },
-  { value: 'game', label: '游戏' },
-  { value: 'other', label: '其他' },
-]
+import { GENRE_OPTIONS as genres } from '@/lib/genres'
 
 export default function CreatePage() {
   const [user, setUser] = useState<User | null>(null)
