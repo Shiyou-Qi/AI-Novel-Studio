@@ -28,6 +28,18 @@ export default async function ProjectEditPage({ params }: PageProps) {
     notFound()
   }
 
+  // Map database fields to component interface (core_idea -> concept,
+  // writing_guidance -> guidance). Without this, every AI generation call
+  // (structure/outline/chapter) silently sent undefined for the user's core
+  // idea and writing guidance, since those DB column names don't match what
+  // ProjectEditor's Project interface expects - title/genre/status etc. are
+  // unaffected since those column names already match.
+  const mappedProject = {
+    ...project,
+    concept: project.core_idea,
+    guidance: project.writing_guidance,
+  }
+
   // Fetch structure
   const { data: structureData } = await supabase
     .from('novel_structures')
@@ -62,7 +74,7 @@ export default async function ProjectEditPage({ params }: PageProps) {
 
   return (
     <ProjectEditor
-      project={project}
+      project={mappedProject}
       structure={structure}
       characters={characters || []}
       chapters={chapters || []}
