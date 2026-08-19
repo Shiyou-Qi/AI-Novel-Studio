@@ -40,7 +40,7 @@ interface PipelineChapter {
 interface StructureContext {
   worldSetting: string
   plotSummary: string
-  mainCharacters: { name: string; role: string; description: string; motivation: string }[]
+  mainCharacters: { id: string; name: string; role: string; description: string; motivation: string }[]
 }
 
 interface PipelineDeps {
@@ -173,23 +173,38 @@ export function useChapterPipeline(deps: PipelineDeps) {
       const nextStates = [...characterStates]
       for (const update of result.characterStateUpdates) {
         const character = deps.structure.mainCharacters.find(c => c.name === update.characterName)
-        if (!character) continue
-        // Need the real character_id for the upsert - look it up from existing
-        // characterStates entries, or fall back to a name-keyed match already loaded.
-        const existing = nextStates.find(s => s.name === update.characterName)
+        if (!character) continue // model named someone not in the cast - ignore rather than guess
         const combinedState = update.relationshipChanges
           ? `${update.updatedState}（关系：${update.relationshipChanges}）`
           : update.updatedState
+
+        // upsert on character_id (unique per novel_character_states) so this
+        // creates the row on the first continuity check for a character and
+        // updates it on every one after - previously this only ever updated,
+        // so state rows never got created in the first place and every
+        // subsequent check kept finding nothing to update.
+        const { error: upsertError } = await supabase
+          .from('novel_character_states')
+          .upsert(
+            {
+              project_id: projectId,
+              character_id: character.id,
+              current_state: combinedState,
+              updated_through_chapter: chapterNumber,
+            },
+            { onConflict: 'character_id' }
+          )
+        if (upsertError) {
+          console.error('Failed to upsert character state:', upsertError)
+          continue
+        }
+
+        const existing = nextStates.find(s => s.characterId === character.id)
         if (existing) {
           existing.currentState = combinedState
-          await supabase
-            .from('novel_character_states')
-            .update({ current_state: combinedState, updated_through_chapter: chapterNumber })
-            .eq('character_id', existing.characterId)
+        } else {
+          nextStates.push({ characterId: character.id, name: character.name, currentState: combinedState })
         }
-        // If no existing row, the character_id isn't known here (would need a
-        // DB lookup by name) - skip silently rather than guess an ID; the next
-        // continuity check will pick it up once state exists.
       }
       setCharacterStates(nextStates)
     }
@@ -271,8 +286,9 @@ export function useChapterPipeline(deps: PipelineDeps) {
         }
         await recordRun(chapter.id, 'hook_doctor', 'completed')
       } catch (err) {
-        await recordRun(chapter.id, 'hook_doctor', 'failed', { error_message: err instanceof Error ? err.message : String(err) })
-        appendLog(chapterNum, 'hook_doctor', '钩子检测失败，跳过（不影响后续步骤）')
+        const message = err instanceof Error ? err.message : String(err)
+        await recordRun(chapter.id, 'hook_doctor', 'failed', { error_message: message })
+        appendLog(chapterNum, 'hook_doctor', `钩子检测失败，跳过（不影响后续步骤）：${message}`)
       }
     }
 
@@ -300,8 +316,9 @@ export function useChapterPipeline(deps: PipelineDeps) {
         : '连贯性检查通过')
       await recordRun(chapter.id, 'continuity_check', 'completed', { output_summary: { issueCount: continuityResult.issues.length } })
     } catch (err) {
-      await recordRun(chapter.id, 'continuity_check', 'failed', { error_message: err instanceof Error ? err.message : String(err) })
-      appendLog(chapterNum, 'continuity_check', '连贯性检查失败，跳过（不影响后续步骤）')
+      const message = err instanceof Error ? err.message : String(err)
+      await recordRun(chapter.id, 'continuity_check', 'failed', { error_message: message })
+      appendLog(chapterNum, 'continuity_check', `连贯性检查失败，跳过（不影响后续步骤）：${message}`)
     }
 
     if (mode === 'fast') {
@@ -344,7 +361,8 @@ export function useChapterPipeline(deps: PipelineDeps) {
         await recordRun(chapter.id, 'reviser', 'completed')
       }
     } catch (err) {
-      appendLog(chapterNum, 'quality_critic', '质量评分/修订出错，按当前内容完成')
+      const message = err instanceof Error ? err.message : String(err)
+      appendLog(chapterNum, 'quality_critic', `质量评分/修订出错，按当前内容完成：${message}`)
     }
 
     await persistChapter(chapter.id, {
