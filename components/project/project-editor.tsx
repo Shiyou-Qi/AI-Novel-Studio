@@ -247,6 +247,19 @@ export function ProjectEditor({ project, structure: initialStructure, characters
     pipeline.runRange(targets, pipelineMode)
   }, [activeChapter, chapters, pipelineRunCount, pipelineMode, pipeline])
 
+  // "Continue" from the first not-yet-completed chapter, running everything
+  // remaining in one action - the manual range runner above requires
+  // re-selecting the right starting chapter and re-clicking every N chapters,
+  // which is exactly the gap for a large (e.g. 100-chapter) book.
+  const firstIncompleteIndex = chapters.findIndex(c => c.status !== 'completed')
+  const remainingChapters = firstIncompleteIndex === -1 ? [] : chapters.slice(firstIncompleteIndex)
+
+  const continuePipeline = useCallback(() => {
+    if (remainingChapters.length === 0) return
+    setShowPipelineLog(true)
+    pipeline.runRange(remainingChapters, pipelineMode)
+  }, [remainingChapters, pipelineMode, pipeline])
+
   // Generate structure
   const generateStructure = useCallback(async () => {
     // Confirm before regenerating: this replaces world/plot/characters on an
@@ -1393,29 +1406,20 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">从第 {currentChapter?.chapter_number} 章开始，运行</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={pipelineRunCount}
-                      onChange={(e) => setPipelineRunCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
-                      disabled={pipeline.isRunning}
-                      className="w-16 h-8 bg-background/50"
-                    />
-                    <span className="text-muted-foreground">章</span>
-                  </div>
-
                   {pipeline.isRunning ? (
                     <Button variant="destructive" size="sm" onClick={pipeline.stop}>
                       <Square className="w-3.5 h-3.5 mr-2" />
                       停止
                     </Button>
-                  ) : (
-                    <Button size="sm" onClick={runPipeline}>
+                  ) : remainingChapters.length > 0 ? (
+                    <Button size="sm" onClick={continuePipeline}>
                       <Play className="w-3.5 h-3.5 mr-2" />
-                      运行流水线
+                      继续写作剩余 {remainingChapters.length} 章
+                    </Button>
+                  ) : (
+                    <Button size="sm" disabled>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
+                      全部章节已完成
                     </Button>
                   )}
 
@@ -1424,6 +1428,28 @@ export function ProjectEditor({ project, structure: initialStructure, characters
                     进度日志 {pipeline.log.length > 0 && `(${pipeline.log.length})`}
                   </Button>
                 </div>
+
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                    手动指定起始章节与数量
+                  </summary>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="text-muted-foreground">从第 {currentChapter?.chapter_number} 章（当前选中）开始，运行</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={pipelineRunCount}
+                      onChange={(e) => setPipelineRunCount(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+                      disabled={pipeline.isRunning}
+                      className="w-16 h-8 bg-background/50"
+                    />
+                    <span className="text-muted-foreground">章</span>
+                    <Button size="sm" variant="outline" onClick={runPipeline} disabled={pipeline.isRunning}>
+                      运行
+                    </Button>
+                  </div>
+                </details>
 
                 {pipeline.isRunning && pipeline.currentLabel && (
                   <p className="text-sm text-primary animate-pulse">{pipeline.currentLabel}</p>
